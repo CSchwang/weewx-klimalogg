@@ -1404,10 +1404,8 @@ def log_frame(n, buf):
         logdbg(strbuf)
 
 
-def get_datum_diff(v, np, ofl):
-    if abs(np - v) < 0.001 or abs(ofl - v) < 0.001:
-        return None
-    return v
+def test_datum_diff(v, np, ofl):
+    return abs(np - v) >= 0.001 and abs(ofl - v) >= 0.001
 
 
 def calc_checksum(buf, start, end=None):
@@ -1930,22 +1928,35 @@ class KlimaLoggDriver(weewx.drivers.AbstractDevice):
                     # FIXME: this belongs in StdWXCalculate
                     for y in range(0, 9):
                         if 'Temp%d' % y in r and 'Humidity%d' % y in r:
-                            r['Dewpoint%d' % y] = weewx.wxformulas.dewpointC(
-                                r['Temp%s' % y], r['Humidity%d' % y])
-                            r['Heatindex%d' % y] = weewx.wxformulas.heatindexC(
-                                r['Temp%s' % y], r['Humidity%d' % y])
+                            temp_ok = test_datum_diff(r['Temp%d' % y],
+                                                      SensorLimits.temperature_NP,
+                                                      SensorLimits.temperature_OFL)
+                            humi_ok = test_datum_diff(r['Humidity%d' % y],
+                                                      SensorLimits.humidity_NP,
+                                                      SensorLimits.humidity_OFL)
+                            if temp_ok and humi_ok:
+                                r['Dewpoint%d' % y] = weewx.wxformulas.dewpointC(
+                                    r['Temp%d' % y], r['Humidity%d' % y])
+                                r['Heatindex%d' % y] = weewx.wxformulas.heatindexC(
+                                    r['Temp%d' % y], r['Humidity%d' % y])
                     # get values requested from the sensor map
                     for k in self.sensor_map:
                         label = self.sensor_map[k]
                         if label in r:
                             if label.startswith('Temp'):
-                                x = get_datum_diff(r[label],
+                                if test_datum_diff(r[label],
                                                    SensorLimits.temperature_NP,
-                                                   SensorLimits.temperature_OFL)
+                                                   SensorLimits.temperature_OFL):
+                                    x = r[label]
+                                else:
+                                    x = None
                             elif label.startswith('Humidity'):
-                                x = get_datum_diff(r[label],
+                                if test_datum_diff(r[label],
                                                    SensorLimits.humidity_NP,
-                                                   SensorLimits.humidity_OFL)
+                                                   SensorLimits.humidity_OFL):
+                                    x = r[label]
+                                else:
+                                    x = None
                             else:
                                 x = r[label]
                             rec[k] = x
@@ -2085,12 +2096,19 @@ class KlimaLoggDriver(weewx.drivers.AbstractDevice):
         # FIXME: this belongs in StdWXCalculate
         for y in range(0, 9):
             if 'Temp%d' % y in data.values and 'Humidity%d' % y in data.values:
-                data.values['Dewpoint%d' % y] = weewx.wxformulas.dewpointC(
-                    data.values['Temp%d' % y],
-                    data.values['Humidity%d' % y])
-                data.values['Heatindex%d' % y] = weewx.wxformulas.heatindexC(
-                    data.values['Temp%d' % y],
-                    data.values['Humidity%d' % y])
+                temp_ok = test_datum_diff(data.values['Temp%d' % y],
+                                          SensorLimits.temperature_NP,
+                                          SensorLimits.temperature_OFL)
+                humi_ok = test_datum_diff(data.values['Humidity%d' % y],
+                                          SensorLimits.humidity_NP,
+                                          SensorLimits.humidity_OFL)
+                if temp_ok and humi_ok:
+                    data.values['Dewpoint%d' % y] = weewx.wxformulas.dewpointC(
+                        data.values['Temp%d' % y],
+                        data.values['Humidity%d' % y])
+                    data.values['Heatindex%d' % y] = weewx.wxformulas.heatindexC(
+                        data.values['Temp%d' % y],
+                        data.values['Humidity%d' % y])
 
         # extract the values from the data object
         for k in self.sensor_map:
@@ -2105,13 +2123,19 @@ class KlimaLoggDriver(weewx.drivers.AbstractDevice):
                 packet[k] = x
             elif label in data.values:
                 if label.startswith('Temp'):
-                    x = get_datum_diff(data.values[label],
+                    if test_datum_diff(data.values[label],
                                        SensorLimits.temperature_NP,
-                                       SensorLimits.temperature_OFL)
+                                       SensorLimits.temperature_OFL):
+                        x = data.values[label]
+                    else:
+                        x = None
                 elif label.startswith('Humidity'):
-                    x = get_datum_diff(data.values[label],
+                    if test_datum_diff(data.values[label],
                                        SensorLimits.humidity_NP,
-                                       SensorLimits.humidity_OFL)
+                                       SensorLimits.humidity_OFL):
+                        x = data.values[label]
+                    else:
+                        x = None
                 else:
                     x = data.values[label]
                 packet[k] = x
